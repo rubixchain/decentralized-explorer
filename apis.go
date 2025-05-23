@@ -216,7 +216,7 @@ func syncLatestTokenState(w http.ResponseWriter, r *http.Request) {
 
 func getLatestMintedToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tokenNumber, tokenLevel := tokenNum()
+	tokenLevel, tokenNumber := tokenNum()
 	response := map[string]interface{}{
 		"token_number": tokenNumber,
 		"token_level":  tokenLevel,
