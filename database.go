@@ -129,7 +129,7 @@ func createSchema(db *sql.DB) (retErr error) {
 	_, retErr = tx.Exec(`
 	    CREATE INDEX IF NOT EXISTS idx_token_info ON token_info(token_id);
 		CREATE INDEX IF NOT EXISTS idx_token_id ON transactions (token_id);
-		CREATE INDEX idx_current_owners_timestamp ON current_owners(timestamp DESC);
+		CREATE INDEX IF NOT EXISTS idx_current_owners_timestamp ON current_owners(timestamp DESC);
 		--CREATE INDEX IF NOT EXISTS idx_peer_id ON transactions (peer_ids);
 		-- CREATE INDEX IF NOT EXISTS idx_epoch ON transactions (epoch);
 		--CREATE INDEX IF NOT EXISTS idx_current_owner_peer_id ON current_owners (peer_ids);
