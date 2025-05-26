@@ -200,7 +200,7 @@ func upsertTransaction(t Transaction) error {
 			return fmt.Errorf("failed to insert into transactions: %w", err)
 		}
 
-		fmt.Printf("🆕 New token_id %s added to current_owners and transactions", t.TokenID)
+		fmt.Printf("New token_id %s added to current_owners and transactions", t.TokenID)
 	} else {
 		_, err = tx.Exec(`
 					UPDATE current_owners

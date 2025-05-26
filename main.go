@@ -45,10 +45,10 @@ func main() {
 	// Periodic weekly sync to check newly minted tokens(runs in the background)
 	go startWeeklySync()
 	go startDailyPinCheck()
-	err = checkPins("QmQPG1tw3TqEbQGvs8AS89LWNsWmn9zzoPcyZbSPucdXne")
-	if err != nil {
-		log.Println("Error checking pins:", err)
-	}
+	// err = checkPins("QmQPG1tw3TqEbQGvs8AS89LWNsWmn9zzoPcyZbSPucdXne")
+	// if err != nil {
+	// 	log.Println("Error checking pins:", err)
+	// }
 
 	log.Println("Server started on :3000")
 	log.Fatal(http.ListenAndServe(":3000", router))

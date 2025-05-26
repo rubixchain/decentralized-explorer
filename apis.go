@@ -39,6 +39,11 @@ type TokenInfo struct {
 	ParentTokenID string  `json:"parent_token_id"`
 }
 
+type PinnerInfo struct {
+	CurrentPinner      []string `json:"currentPinner"`
+	CurrentEpochPinner []string `json:"currentEpochPinner"`
+}
+
 func getTransactionsByTokenID(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	tokenID := vars["tokenID"]
@@ -203,7 +208,7 @@ func syncLatestTokenState(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	tokenID := vars["tokenID"]
 
-	err := checkPins(tokenID)
+	pinnerInfo, err := checkPins(tokenID)
 	if err != nil {
 		http.Error(w, "Sync failed: "+err.Error(), http.StatusInternalServerError)
 		log.Println("Sync error:", err)
@@ -211,6 +216,15 @@ func syncLatestTokenState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	if pinnerInfo != nil {
+		// Token not found, returning just pinner info
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"currentPinner":      pinnerInfo.CurrentPinner,
+			"currentEpochPinner": pinnerInfo.CurrentEpochPinner,
+		})
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 

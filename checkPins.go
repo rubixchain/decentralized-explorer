@@ -199,8 +199,7 @@ func generateTokenID(currentLevel int, currentNum int, latestLevel int, latestNu
 	return nil
 }
 
-func checkPins(token string) error {
-	// fmt.Println("Checking pins for token:", token)
+func checkPins(token string) (*PinnerInfo, error) {
 	currentWeek := GetWeeksPassed()
 	ipfs := ipfs.GetShell()
 
@@ -210,7 +209,7 @@ func checkPins(token string) error {
 	currentPinner, err := GetDHTddrs(token)
 	if err != nil {
 		log.Printf("Failed to check pins for token %s: %v", token, err)
-		return err
+		return nil, err
 	}
 
 	fmt.Printf("currentPinner : %v for token : %v", currentPinner, token)
@@ -219,7 +218,7 @@ func checkPins(token string) error {
 	// Check for ownership change -- update to pick the most recent pinner (TODO)
 
 	if len(currentPinner) == 0 {
-		return fmt.Errorf("no peers found for token %s", token)
+		return nil, fmt.Errorf("no peers found for token %s", token)
 	}
 
 	// Generate tokenEpoch hash (tokenID + weekEpoch)
@@ -229,7 +228,7 @@ func checkPins(token string) error {
 
 	if err != nil {
 		log.Printf("Failed to add token epoch %q to IPFS: %v", token, err)
-		return err
+		return nil, err
 	}
 
 	// fmt.Println("tokenEpochCID : ", tokenEpochCID)
@@ -237,16 +236,31 @@ func checkPins(token string) error {
 	currentEpochPinner, err := GetDHTddrs(tokenEpochCID)
 	if err != nil {
 		log.Printf("Failed to check pins for token epoch %s: %v", tokenEpochCID, err)
-		return err
+		return nil, err
 		// continue
 	}
 
 	// Begin database transaction
 	tx, err := db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+
+	if currentPinner != nil {
+		var exists bool
+		err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM token_info WHERE token_id = $1)", token).Scan(&exists)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check token existence: %w", err)
+		}
+
+		if !exists {
+			return &PinnerInfo{
+				CurrentPinner:      currentPinner,
+				CurrentEpochPinner: currentEpochPinner,
+			}, nil
+		}
+	}
 
 	var existingPeerIDs []string
 	err = tx.QueryRow(`SELECT peer_ids FROM current_owners WHERE token_id = $1`, token).
@@ -254,7 +268,7 @@ func checkPins(token string) error {
 
 	// If token exists in current_owners and peers haven't changed, skip update
 	if err == nil && comparePeers(currentPinner, existingPeerIDs) {
-		return fmt.Errorf("no change in ownership for token %s", token)
+		return nil, fmt.Errorf("no change in ownership for token %s", token)
 	}
 
 	t := Transaction{
@@ -267,9 +281,9 @@ func checkPins(token string) error {
 
 	err = upsertTransaction(t)
 	if err != nil {
-		return fmt.Errorf("failed to upsert transaction: %w", err)
+		return nil, fmt.Errorf("failed to upsert transaction: %w", err)
 	}
-	return nil
+	return nil, nil
 }
 
 func GetDHTddrs(cid string) ([]string, error) {
@@ -361,7 +375,7 @@ func syncMissingCurrentOwners() error {
 	log.Printf("Found %d token(s) missing from current_owners. Checking pins...\n", len(missingTokens))
 	for _, tokenID := range missingTokens {
 		log.Printf("Checking pin for token_id: %s", tokenID)
-		if err := checkPins(tokenID); err != nil {
+		if _, err := checkPins(tokenID); err != nil {
 			log.Printf("checkPins failed for %s: %v", tokenID, err)
 		}
 	}
@@ -454,7 +468,7 @@ func startDailyPinCheck() {
 						}
 					}()
 
-					if err := checkPins(t); err != nil {
+					if _, err := checkPins(t); err != nil {
 						log.Printf("Pin check failed for %s: %v", t, err)
 						atomic.AddInt64(&errorCount, 1)
 					}
