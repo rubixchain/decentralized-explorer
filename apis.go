@@ -272,7 +272,7 @@ func getTokenInfoByTokenID(w http.ResponseWriter, r *http.Request) {
 
 	var t TokenInfo
 	for rows.Next() {
-		err := rows.Scan(&t.TokenLevel, &t.TokenNumber, &t.TokenValue, &parentTokenID)
+		err := rows.Scan(&t.TokenLevel, &t.TokenNumber, &t.TokenValue, &parentTokenID, &t.TokenType)
 		if err != nil {
 			http.Error(w, "DB row scan error", http.StatusInternalServerError)
 			log.Println("Row scan error:", err)
