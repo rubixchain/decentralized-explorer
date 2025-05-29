@@ -97,6 +97,7 @@ func createSchema(db *sql.DB) (retErr error) {
 			token_number INT NOT NULL,
 			token_value NUMERIC NOT NULL,
 			parent_token_id TEXT,
+			token_type TEXT,
 			-- Optional: Add constraint for parent-child relationship
 			FOREIGN KEY (parent_token_id) REFERENCES token_info(token_id)
         );

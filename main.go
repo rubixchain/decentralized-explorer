@@ -51,6 +51,10 @@ func main() {
 	// }
 
 	log.Println("Server started on :3000")
-	log.Fatal(http.ListenAndServe(":3000", router))
+
+	handlerWithCORS := enableCORS(router)
+	log.Fatal(http.ListenAndServe(":3000", handlerWithCORS))
+
+	// log.Fatal(http.ListenAndServe(":3000", router))
 
 }

@@ -112,6 +112,7 @@ func checkTokenCount() {
 	err := db.QueryRow(`
         SELECT token_level, token_number 
         FROM token_info 
+		WHERE token_type = 'RBT' 
         ORDER BY token_number DESC, token_level DESC
         LIMIT 1
     `).Scan(&latestLevel, &latestNum)
@@ -164,8 +165,8 @@ func generateTokenID(currentLevel int, currentNum int, latestLevel int, latestNu
 		// Insert into token_info table
 		_, err = tx.Exec(`
 			INSERT INTO token_info 
-			(token_id, token_level, token_number, token_value, parent_token_id)
-			VALUES ($1, $2, $3, 1, NULL)
+			(token_id, token_level, token_number, token_value, parent_token_id, token_type)
+			VALUES ($1, $2, $3, 1, NULL, RBT)
 		`, token_id, level, num)
 		if err != nil {
 			return fmt.Errorf("failed to insert token %q: %w", token_info, err)

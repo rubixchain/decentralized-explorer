@@ -36,6 +36,7 @@ type TokenInfo struct {
 	TokenLevel    int     `json:"token_level"`
 	TokenNumber   int     `json:"token_number"`
 	TokenValue    float64 `json:"token_value"`
+	TokenType     string  `json:"token_type"`
 	ParentTokenID string  `json:"parent_token_id"`
 }
 
@@ -45,17 +46,74 @@ type PinnerInfo struct {
 }
 
 func getTransactionsByTokenID(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
 	tokenID := vars["tokenID"]
+
+	// Check if token exists first
+	var tokenExists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM token_info WHERE token_id = $1)", tokenID).Scan(&tokenExists)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Token check error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if !tokenExists {
+		pinnerInfo, _ := checkPins(tokenID)
+		if pinnerInfo != nil {
+			// Token not found, returning just pinner info
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"currentPinner":      pinnerInfo.CurrentPinner,
+				"currentEpochPinner": pinnerInfo.CurrentEpochPinner,
+				"isExists":           tokenExists,
+			})
+			return
+		}
+		http.Error(w, "Token not found", http.StatusNotFound)
+		return
+	}
+
+	page := 1
+	limit := 30 // default
+
+	queryParams := r.URL.Query()
+	if val := queryParams.Get("page"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if val := queryParams.Get("limit"); val != "" {
+		if l, err := strconv.Atoi(val); err == nil && l > 0 {
+			if l > 100 {
+				l = 100
+			}
+			limit = l
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	var totalCount int
+	err = db.QueryRow(`SELECT COUNT(*) FROM transactions WHERE token_id = $1`, tokenID).Scan(&totalCount)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get total count: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if totalCount == 0 {
+		http.Error(w, "No details found for tokenID", http.StatusNotFound)
+		return
+	}
 
 	query := `
 		SELECT tx_id, token_id, peer_ids, epoch, quorums, timestamp
 		FROM transactions
 		WHERE token_id = $1
-		ORDER BY epoch ASC
+		ORDER BY timestamp DESC
+		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := db.Query(query, tokenID)
+	rows, err := db.Query(query, tokenID, limit, offset)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("DB query error: %v", err), http.StatusInternalServerError)
 		log.Println("DB query error:", err)
@@ -77,35 +135,75 @@ func getTransactionsByTokenID(w http.ResponseWriter, r *http.Request) {
 		transactions = append(transactions, t)
 	}
 
-	if len(transactions) == 0 {
-		http.Error(w, "No transactions found", http.StatusNotFound)
-		return
-	}
-
 	if err = rows.Err(); err != nil {
 		http.Error(w, "Rows iteration error", http.StatusInternalServerError)
 		log.Println("Rows iteration error:", err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(transactions); err != nil {
+	// Enhanced response with pagination metadata
+	response := map[string]interface{}{
+		"isExists": tokenExists,
+		"data":     transactions,
+		"pagination": map[string]interface{}{
+			"total":        totalCount,
+			"current_page": page,
+			"per_page":     limit,
+			"total_pages":  int(math.Ceil(float64(totalCount) / float64(limit))),
+		},
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "JSON encoding error", http.StatusInternalServerError)
 		log.Println("JSON encoding error:", err)
 	}
 }
 
 func getCurrentTokensByPeerID(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
 	peerID := vars["peerID"]
 
-	query := `
-		SELECT token_id, peer_ids, epoch, quorums, timestamp
-		FROM current_owners
-		WHERE $1 = ANY(peer_ids)
-	`
+	page := 1
+	limit := 30 // default
 
-	rows, err := db.Query(query, peerID)
+	queryParams := r.URL.Query()
+	if val := queryParams.Get("page"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if val := queryParams.Get("limit"); val != "" {
+		if l, err := strconv.Atoi(val); err == nil && l > 0 {
+			if l > 100 {
+				l = 100
+			}
+			limit = l
+		}
+	}
+
+	offset := (page - 1) * limit
+	var tokenOwnedCount int
+
+	err := db.QueryRow(`SELECT COUNT(*) FROM current_owners WHERE $1 = ANY(peer_ids)`, peerID).Scan(&tokenOwnedCount)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get total count of tokens: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if tokenOwnedCount == 0 {
+		http.Error(w, "No tokens found for peerID "+peerID, http.StatusNotFound)
+		return
+	}
+
+	query := `
+		SELECT co.token_id, co.peer_ids, co.epoch, co.quorums, co.timestamp, ti.token_value
+		FROM current_owners co
+		JOIN token_info ti ON co.token_id = ti.token_id
+		WHERE $1 = ANY(co.peer_ids)
+		ORDER BY co.timestamp DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := db.Query(query, peerID, limit, offset)
 	if err != nil {
 		http.Error(w, "DB query error", http.StatusInternalServerError)
 		log.Println("DB query error:", err)
@@ -113,23 +211,21 @@ func getCurrentTokensByPeerID(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var tokens []CurrentOwner
+	totalValue := 0.0
+	var tokensOwned []CurrentOwner
 	for rows.Next() {
 		var token CurrentOwner
+		var tokenValue float64
 
-		err := rows.Scan(&token.TokenID, pq.Array(&token.PeerID), &token.Epoch, pq.Array(&token.Quorums), &token.Timestamp)
+		err := rows.Scan(&token.TokenID, pq.Array(&token.PeerID), &token.Epoch, pq.Array(&token.Quorums), &token.Timestamp, &tokenValue)
 		if err != nil {
 			http.Error(w, "DB row scan error", http.StatusInternalServerError)
 			log.Println("Row scan error:", err)
 			return
 		}
+		totalValue += tokenValue
 
-		tokens = append(tokens, token)
-	}
-
-	if len(tokens) == 0 {
-		http.Error(w, "No tokens found for peerID "+peerID, http.StatusNotFound)
-		return
+		tokensOwned = append(tokensOwned, token)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -138,8 +234,18 @@ func getCurrentTokensByPeerID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(tokens); err != nil {
+	// Enhanced response with pagination metadata
+	response := map[string]interface{}{
+		"data":        tokensOwned,
+		"total_value": totalValue,
+		"pagination": map[string]interface{}{
+			"total":        tokenOwnedCount,
+			"current_page": page,
+			"per_page":     limit,
+			"total_pages":  int(math.Ceil(float64(tokenOwnedCount) / float64(limit))),
+		},
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "JSON encoding error", http.StatusInternalServerError)
 		log.Println("JSON encoding error:", err)
 	}
@@ -151,7 +257,7 @@ func getTokenInfoByTokenID(w http.ResponseWriter, r *http.Request) {
 	var parentTokenID sql.NullString
 
 	query := `
-		SELECT token_level, token_number, token_value, parent_token_id
+		SELECT token_level, token_number, token_value, parent_token_id, token_type
 		FROM token_info
 		WHERE token_id = $1
 	`
@@ -208,7 +314,7 @@ func syncLatestTokenState(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	tokenID := vars["tokenID"]
 
-	pinnerInfo, err := checkPins(tokenID)
+	_, err := checkPins(tokenID)
 	if err != nil {
 		http.Error(w, "Sync failed: "+err.Error(), http.StatusInternalServerError)
 		log.Println("Sync error:", err)
@@ -217,14 +323,6 @@ func syncLatestTokenState(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if pinnerInfo != nil {
-		// Token not found, returning just pinner info
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"currentPinner":      pinnerInfo.CurrentPinner,
-			"currentEpochPinner": pinnerInfo.CurrentEpochPinner,
-		})
-		return
-	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
