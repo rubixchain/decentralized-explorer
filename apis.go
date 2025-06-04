@@ -84,9 +84,9 @@ func getTransactionsByTokenID(w http.ResponseWriter, r *http.Request) {
 	}
 	if val := queryParams.Get("limit"); val != "" {
 		if l, err := strconv.Atoi(val); err == nil && l > 0 {
-			if l > 100 {
-				l = 100
-			}
+			// if l > 100 {
+			// 	l = 100
+			// }
 			limit = l
 		}
 	}
@@ -174,9 +174,9 @@ func getCurrentTokensByPeerID(w http.ResponseWriter, r *http.Request) {
 	}
 	if val := queryParams.Get("limit"); val != "" {
 		if l, err := strconv.Atoi(val); err == nil && l > 0 {
-			if l > 100 {
-				l = 100
-			}
+			// if l > 100 {
+			// 	l = 100
+			// }
 			limit = l
 		}
 	}
@@ -359,9 +359,9 @@ func getCurrentTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	if val := query.Get("limit"); val != "" {
 		if l, err := strconv.Atoi(val); err == nil && l > 0 {
-			if l > 100 {
-				l = 100
-			}
+			// if l > 100 {
+			// 	l = 100
+			// }
 			limit = l
 		}
 	}
