@@ -120,7 +120,10 @@ func checkTokenCount() {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Table is empty - print True
-			generateTokenID(currentLevel, currentNum, 1, 0)
+			genErr := generateTokenID(currentLevel, currentNum, 1, 0)
+			if genErr != nil {
+				fmt.Println(genErr)
+			}
 			return
 		}
 		log.Printf("Error querying latest token: %v", err)
@@ -129,7 +132,10 @@ func checkTokenCount() {
 
 	// Check if current values are more than the latest in DB
 	if currentLevel > latestLevel || currentNum > latestNum {
-		generateTokenID(currentLevel, currentNum, latestLevel, latestNum)
+		genErr := generateTokenID(currentLevel, currentNum, latestLevel, latestNum)
+		if genErr != nil {
+			fmt.Println(genErr)
+		}
 	}
 
 }
@@ -150,6 +156,7 @@ func generateTokenID(currentLevel int, currentNum int, latestLevel int, latestNu
 	for {
 		// Check if we've reached the current level and number
 		if level > currentLevel || (level == currentLevel && num > currentNum) {
+			log.Println("Token generation complete.")
 			break
 		}
 
@@ -157,16 +164,19 @@ func generateTokenID(currentLevel int, currentNum int, latestLevel int, latestNu
 		token_info := fmt.Sprintf("%d %d", level, num)
 
 		// Add to IPFS - single allocation version
+		log.Printf("Attempting to add token info '%s' to IPFS...", token_info)
 		token_id, err := ipfs.Add(strings.NewReader(token_info), ipfsnode.Pin(false), ipfsnode.OnlyHash(true))
 		if err != nil {
 			log.Printf("Failed to add token %q to IPFS: %v", token_info, err)
 			return err
 		}
+
+		log.Printf("IPFS add succeeded. Token ID: %s", token_id)
 		// Insert into token_info table
 		_, err = tx.Exec(`
 			INSERT INTO token_info 
 			(token_id, token_level, token_number, token_value, parent_token_id, token_type)
-			VALUES ($1, $2, $3, 1, NULL, RBT)
+			VALUES ($1, $2, $3, 1, NULL, 'RBT')
 		`, token_id, level, num)
 		if err != nil {
 			return fmt.Errorf("failed to insert token %q: %w", token_info, err)
