@@ -127,8 +127,8 @@ func checkTokenCount() {
 		return
 	}
 
-	// Check if current values are less than the latest in DB
-	if currentLevel < latestLevel || currentNum < latestNum {
+	// Check if current values are more than the latest in DB
+	if currentLevel > latestLevel || currentNum > latestNum {
 		generateTokenID(currentLevel, currentNum, latestLevel, latestNum)
 	}
 
