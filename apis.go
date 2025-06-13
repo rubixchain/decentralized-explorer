@@ -342,7 +342,7 @@ func tokenNum() (int, int) {
 	// Placeholder logic for token number and level
 	// In a real application, this would involve querying the database or some other logic
 	// to determine the current token number and level.
-	return 4, 2188563
+	return 1, 50
 }
 
 func getCurrentTokens(w http.ResponseWriter, r *http.Request) {

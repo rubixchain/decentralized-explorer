@@ -114,7 +114,7 @@ func checkTokenCount() {
         SELECT token_level, token_number 
         FROM token_info 
 		WHERE token_type = 'RBT' 
-        ORDER BY token_number DESC, token_level DESC
+        ORDER BY token_level DESC, token_number DESC
         LIMIT 1
     `).Scan(&latestLevel, &latestNum)
 
