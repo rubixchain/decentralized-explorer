@@ -41,6 +41,7 @@ type TokenInfo struct {
 }
 
 type PinnerInfo struct {
+	TokenDetails       string   `json:"tokenDetails"`
 	CurrentPinner      []string `json:"currentPinner"`
 	CurrentEpochPinner []string `json:"currentEpochPinner"`
 }
@@ -63,6 +64,7 @@ func getTransactionsByTokenID(w http.ResponseWriter, r *http.Request) {
 		if pinnerInfo != nil {
 			// Token not found, returning just pinner info
 			json.NewEncoder(w).Encode(map[string]interface{}{
+				"tokenDetails":       pinnerInfo.TokenDetails,
 				"currentPinner":      pinnerInfo.CurrentPinner,
 				"currentEpochPinner": pinnerInfo.CurrentEpochPinner,
 				"isExists":           tokenExists,

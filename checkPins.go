@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -229,6 +230,7 @@ func checkPins(token string) (*PinnerInfo, error) {
 	// Check for ownership change -- update to pick the most recent pinner (TODO)
 
 	if len(currentPinner) == 0 {
+		log.Println(fmt.Errorf("no peers found for token %s", token))
 		return nil, fmt.Errorf("no peers found for token %s", token)
 	}
 
@@ -266,7 +268,21 @@ func checkPins(token string) (*PinnerInfo, error) {
 		}
 
 		if !exists {
+			var ti string
+			rc, err := ipfs.Cat(token)
+			if err != nil {
+				ti = "Cannot fetch token details"
+			}
+			defer rc.Close()
+			buf, err := io.ReadAll(rc)
+			if err != nil {
+				ti = "failed to read token content"
+			}
+
+			ti = string(buf)
+
 			return &PinnerInfo{
+				TokenDetails:       ti,
 				CurrentPinner:      currentPinner,
 				CurrentEpochPinner: currentEpochPinner,
 			}, nil
@@ -326,7 +342,8 @@ func GetDHTddrs(cid string) ([]string, error) {
 		if strings.Contains(m, "Error") {
 			return nil, fmt.Errorf(m)
 		}
-		if !strings.HasPrefix(m, "Qm") {
+		// Collect only peer IDs (libp2p peer IDs start with "12D3Koo")
+		if strings.HasPrefix(m, "12D3Koo") {
 			ids = append(ids, m)
 		}
 	}
